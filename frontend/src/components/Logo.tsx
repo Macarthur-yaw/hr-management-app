@@ -1,0 +1,1 @@
+export default function Logo(){return <div className="flex items-center gap-1 font-black text-2xl"><span className="rounded-md bg-[#049FA7] px-1.5 py-0.5 text-white">H</span><span className="text-[#049FA7]">Q</span></div>}

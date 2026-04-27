@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  hr_manager
+  employee
+}
+
+enum EmploymentStatus {
+  active
+  inactive
+  on_leave
+  terminated
+}
+
+enum AccessLevel {
+  basic
+  manager
+  admin
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
+model User {
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  password              String
+  role                  UserRole       @default(employee)
+  isActive              Boolean        @default(true)
+  employee              Employee?
+  refreshTokens         RefreshToken[]
+  reviewedLeaveRequests LeaveRequest[] @relation("LeaveRequestReviewer")
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model Employee {
+  id                 String           @id @default(cuid())
+  userId             String           @unique
+  firstName          String
+  lastName           String
+  phone              String?
+  address            String?
+  departmentId       String?
+  positionId         String?
+  salary             Decimal?         @db.Decimal(12, 2)
+  employmentStatus   EmploymentStatus @default(active)
+  dateJoined         DateTime         @default(now())
+  profileImage       String?
+  isActive           Boolean          @default(true)
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department         Department?      @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  position           Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  managedDepartments Department[]     @relation("DepartmentManager")
+  leaveRequests      LeaveRequest[]   @relation("EmployeeLeaveRequests")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([departmentId])
+  @@index([positionId])
+  @@index([employmentStatus])
+}
+
+model Department {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  managerId   String?
+  manager     Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  employees   Employee[] @relation("EmployeeDepartment")
+  positions   Position[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([managerId])
+}
+
+model Position {
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  departmentId String?
+  permissions  String[]    @default([])
+  accessLevel  AccessLevel @default(basic)
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  employees    Employee[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([departmentId])
+}
+
+model LeaveRequest {
+  id               String      @id @default(cuid())
+  employeeId       String
+  startDate        DateTime
+  endDate          DateTime
+  reason           String
+  status           LeaveStatus @default(pending)
+  reviewedByUserId String?
+  reviewComment    String?
+  employee         Employee    @relation("EmployeeLeaveRequests", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewedBy       User?       @relation("LeaveRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([reviewedByUserId])
+}

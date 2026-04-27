@@ -1,0 +1,2 @@
+import table from '@/assets/comparison-table.webp';
+export default function Comparison(){return <section id="hq-vs-others" className="section bg-white text-center"><div className="container"><h2 className="text-3xl font-black"><span className="text-[#049FA7]">H</span><span className="text-orange-400">Q</span> <span className="text-orange-500">vs Others</span></h2><img src={table} className="mx-auto mt-8 w-full max-w-4xl"/></div></section>}
