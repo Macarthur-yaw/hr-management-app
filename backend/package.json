@@ -7,6 +7,7 @@
     "start": "node dist/server.js",
     "dev": "prisma generate && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "prisma generate && tsc",
+    "render-build": "npm ci --include=dev && npm run build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -22,6 +23,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
