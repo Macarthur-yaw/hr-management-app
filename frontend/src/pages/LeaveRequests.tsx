@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { CellValue, ColumnDef, SortState } from 'flowers-nextjs-table'
-import { Table } from 'flowers-nextjs-table'
-import { CheckCircle2, Eye, Search, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { CalendarPlus, CheckCircle2, Eye, Search, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
+import DataTable, {
+  type DataTableColumn,
+  type DataTableSortState,
+} from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -25,7 +27,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Textarea } from '@/components/ui/textarea'
-import { canManagePeople, useAuthStore } from '@/hooks/useAuth'
+import {
+  canRequestLeave,
+  canReviewLeave,
+  useAuthStore,
+} from '@/hooks/useAuth'
 import {
   getApiErrorMessage,
   leaveService,
@@ -48,9 +54,16 @@ interface LeaveRequestRow {
   raw: LeaveRequest
 }
 
-type LeaveRequestColumns = LeaveRequestRow & {
-  [key: string]: CellValue
-}
+type LeaveRequestSortKey =
+  | 'employeeName'
+  | 'department'
+  | 'startDate'
+  | 'endDate'
+  | 'reason'
+  | 'status'
+  | 'requestedAt'
+
+type LeaveRequestSortState = DataTableSortState<LeaveRequestSortKey>
 
 const statusLabels: Record<LeaveStatus, LeaveRequestRow['status']> = {
   pending: 'Pending',
@@ -104,12 +117,13 @@ const getLeaveColumns = ({
     request: LeaveRequestRow,
     status: Extract<LeaveStatus, 'approved' | 'rejected'>,
   ) => void
-}): ColumnDef<LeaveRequestColumns>[] => [
+}): DataTableColumn<LeaveRequestRow, LeaveRequestSortKey>[] => [
   {
-    accessorKey: 'employeeName',
+    key: 'employee',
     header: 'Employee',
-    enableSorting: true,
-    cell: (request) => (
+    sortKey: 'employeeName',
+    getSortValue: (request) => request.employeeName,
+    render: (request) => (
       <div>
         <div className="font-medium text-slate-900">{request.employeeName}</div>
         <div className="text-xs text-slate-500">{request.employeeEmail}</div>
@@ -117,86 +131,96 @@ const getLeaveColumns = ({
     ),
   },
   {
-    accessorKey: 'department',
+    key: 'department',
     header: 'Department',
-    enableSorting: true,
+    sortKey: 'department',
+    getSortValue: (request) => request.department,
+    render: (request) => request.department,
   },
   {
-    accessorKey: 'startDate',
+    key: 'startDate',
     header: 'Start Date',
-    enableSorting: true,
+    sortKey: 'startDate',
+    getSortValue: (request) => request.startDate,
+    render: (request) => request.startDate,
   },
   {
-    accessorKey: 'endDate',
+    key: 'endDate',
     header: 'End Date',
-    enableSorting: true,
+    sortKey: 'endDate',
+    getSortValue: (request) => request.endDate,
+    render: (request) => request.endDate,
   },
   {
-    accessorKey: 'reason',
+    key: 'reason',
     header: 'Reason',
-    enableSorting: true,
-    cell: (request) => (
+    sortKey: 'reason',
+    getSortValue: (request) => request.reason,
+    render: (request) => (
       <button
         type="button"
-        onClick={() => onView(request as LeaveRequestRow)}
+        onClick={() => onView(request)}
         className="max-w-[240px] truncate text-left text-sm text-slate-700 underline-offset-4 hover:text-[#049FA7] hover:underline"
       >
         {request.reason}
       </button>
     ),
+    cellClassName: 'max-w-[280px]',
   },
   {
-    accessorKey: 'status',
+    key: 'status',
     header: 'Status',
-    enableSorting: true,
-    cell: (request) => getStatusBadge(request.status),
+    sortKey: 'status',
+    getSortValue: (request) => request.status,
+    render: (request) => getStatusBadge(request.status),
   },
   {
-    accessorKey: 'requestedAt',
+    key: 'requestedAt',
     header: 'Requested',
-    enableSorting: true,
+    sortKey: 'requestedAt',
+    getSortValue: (request) => request.requestedAt,
+    render: (request) => request.requestedAt,
   },
   {
-    accessorKey: 'actions',
-    header: '',
-    enableSorting: false,
-    enableResizing: false,
-    size: canManageLeave ? 170 : 70,
-    cell: (request) => {
-      const row = request as LeaveRequestRow
-
+    key: 'actions',
+    header: 'Actions',
+    align: 'right',
+    render: (request) => {
       return (
         <div className="flex items-center justify-end gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="text-slate-600 hover:text-slate-900"
-            onClick={() => onView(row)}
-            aria-label={`View leave request for ${row.employeeName}`}
+            className="h-8 rounded-md px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            onClick={() => onView(request)}
+            aria-label={`View leave request for ${request.employeeName}`}
           >
-            <Eye className="h-4 w-4" />
+            <Eye className="h-4 w-4 stroke-[2.5]" />
+            View
           </Button>
-          {canManageLeave && row.status === 'Pending' && (
+          {canManageLeave && request.status === 'Pending' && (
             <>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-green-600 hover:text-green-800"
+                className="h-8 rounded-md px-2.5 text-xs font-semibold text-green-700 hover:bg-green-50 hover:text-green-800"
                 disabled={isReviewing}
-                onClick={() => onReview(row, 'approved')}
-                aria-label={`Approve leave request for ${row.employeeName}`}
+                onClick={() => onReview(request, 'approved')}
+                aria-label={`Approve leave request for ${request.employeeName}`}
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                Approve
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-red-600 hover:text-red-800"
+                className="h-8 rounded-md px-2.5 text-xs font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
                 disabled={isReviewing}
-                onClick={() => onReview(row, 'rejected')}
-                aria-label={`Reject leave request for ${row.employeeName}`}
+                onClick={() => onReview(request, 'rejected')}
+                aria-label={`Reject leave request for ${request.employeeName}`}
               >
-                <XCircle className="h-4 w-4" />
+                <XCircle className="h-4 w-4 stroke-[2.5]" />
+                Reject
               </Button>
             </>
           )}
@@ -206,10 +230,24 @@ const getLeaveColumns = ({
   },
 ]
 
+const initialLeaveRequestSort: LeaveRequestSortState = {
+  key: 'requestedAt',
+  direction: 'desc',
+}
+
+const defaultLeaveForm = {
+  startDate: '',
+  endDate: '',
+  reason: '',
+}
+
 export default function LeaveRequestsPage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestRow[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false)
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false)
+  const [leaveForm, setLeaveForm] = useState(defaultLeaveForm)
   const [isReviewing, setIsReviewing] = useState(false)
   const [detailRequest, setDetailRequest] = useState<LeaveRequestRow | null>(null)
   const [reviewTarget, setReviewTarget] = useState<{
@@ -217,12 +255,9 @@ export default function LeaveRequestsPage() {
     status: Extract<LeaveStatus, 'approved' | 'rejected'>
   } | null>(null)
   const [reviewComment, setReviewComment] = useState('')
-  const [sortState, setSortState] = useState<SortState<LeaveRequestColumns>>({
-    key: null,
-    direction: 'asc',
-  })
   const { user } = useAuthStore()
-  const canManageLeave = canManagePeople(user?.role)
+  const canManageLeave = canReviewLeave(user?.role)
+  const canCreateLeaveRequest = canRequestLeave(user?.role)
 
   useEffect(() => {
     let isActive = true
@@ -316,6 +351,37 @@ export default function LeaveRequestsPage() {
     }
   }
 
+  const handleRequestLeave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!leaveForm.startDate || !leaveForm.endDate || !leaveForm.reason.trim()) {
+      toast.error('Please provide start date, end date, and reason')
+      return
+    }
+
+    setIsSubmittingRequest(true)
+
+    try {
+      const response = await leaveService.request({
+        startDate: leaveForm.startDate,
+        endDate: leaveForm.endDate,
+        reason: leaveForm.reason.trim(),
+      })
+
+      setLeaveRequests((current) => [
+        mapLeaveRequest(response.leaveRequest),
+        ...current,
+      ])
+      setLeaveForm(defaultLeaveForm)
+      setIsRequestDialogOpen(false)
+      toast.success('Leave request submitted')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Could not submit leave request'))
+    } finally {
+      setIsSubmittingRequest(false)
+    }
+  }
+
   const columns = getLeaveColumns({
     canManageLeave,
     isReviewing,
@@ -325,59 +391,61 @@ export default function LeaveRequestsPage() {
 
   return (
     <div className="space-y-6 rounded-[32px] bg-white p-8 shadow-sm">
-      <div>
-        <h1 className="text-3xl font-extrabold text-slate-950">Leave Requests</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {canManageLeave
-            ? 'View, approve, and reject employee leave requests.'
-            : 'View your leave request history.'}
-        </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-950">Leave Requests</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {canManageLeave
+              ? 'View, approve, and reject employee leave requests.'
+              : 'Request leave and view your leave history.'}
+          </p>
+        </div>
+
+        {canCreateLeaveRequest && !canManageLeave && (
+          <Button
+            size="lg"
+            className="rounded-xl bg-[#049FA7] text-xs text-white hover:bg-[#038891]"
+            onClick={() => setIsRequestDialogOpen(true)}
+          >
+            <CalendarPlus size={14} />
+            Request Leave
+          </Button>
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave Request List</CardTitle>
+      <Card className="rounded-lg border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-200 bg-slate-50/80">
+          <CardTitle className="text-slate-950">Leave Request List</CardTitle>
           <CardDescription>
             {canManageLeave
               ? 'All leave requests from employees'
               : 'Your submitted leave requests'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 placeholder="Search leave requests..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-100 pl-10 text-slate-900 shadow-sm focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
+                className="h-10 rounded-md border border-slate-300 bg-white pl-10 text-slate-900 shadow-none focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-8 text-sm font-medium text-slate-500">
-                <LoadingSpinner label="Loading leave requests" />
-                Loading leave requests...
-              </div>
-            ) : (
-              <Table
-                data={filteredLeaveRequests as LeaveRequestColumns[]}
-                columns={columns}
-                searchValue=""
-                itemsPerPage={10}
-                paginationMode="auto"
-                sortState={sortState}
-                onSortChange={setSortState}
-                showPageNumbers
-                classNames={{
-                  table: 'min-w-full divide-y divide-slate-200 text-sm',
-                }}
-              />
-            )}
-          </div>
+          <DataTable
+            key={searchTerm}
+            data={filteredLeaveRequests}
+            columns={columns}
+            getRowKey={(request) => request.id}
+            initialSort={initialLeaveRequestSort}
+            emptyMessage="No leave requests found."
+            isLoading={isLoading}
+            loadingLabel="Loading leave requests"
+            minWidthClassName="min-w-[1040px]"
+          />
         </CardContent>
       </Card>
 
@@ -423,6 +491,101 @@ export default function LeaveRequestsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isRequestDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSubmittingRequest) {
+            setLeaveForm(defaultLeaveForm)
+          }
+          setIsRequestDialogOpen(open)
+        }}
+      >
+        <DialogContent className="max-w-lg bg-white">
+          <DialogHeader>
+            <DialogTitle>Request leave</DialogTitle>
+            <DialogDescription>
+              Submit your dates and reason for HR review.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            id="request-leave-form"
+            onSubmit={handleRequestLeave}
+            className="space-y-4"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="leave-start" className="text-xs font-medium text-slate-700">
+                  Start date
+                </Label>
+                <Input
+                  id="leave-start"
+                  type="date"
+                  value={leaveForm.startDate}
+                  onChange={(event) =>
+                    setLeaveForm((current) => ({
+                      ...current,
+                      startDate: event.target.value,
+                    }))
+                  }
+                  className="rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:border-[#049FA7] focus:bg-white focus:ring-2 focus:ring-[#049FA7]/20"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="leave-end" className="text-xs font-medium text-slate-700">
+                  End date
+                </Label>
+                <Input
+                  id="leave-end"
+                  type="date"
+                  value={leaveForm.endDate}
+                  onChange={(event) =>
+                    setLeaveForm((current) => ({
+                      ...current,
+                      endDate: event.target.value,
+                    }))
+                  }
+                  className="rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:border-[#049FA7] focus:bg-white focus:ring-2 focus:ring-[#049FA7]/20"
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="leave-reason" className="text-xs font-medium text-slate-700">
+                Reason
+              </Label>
+              <Textarea
+                id="leave-reason"
+                value={leaveForm.reason}
+                onChange={(event) =>
+                  setLeaveForm((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
+                placeholder="Share the reason for your leave"
+                className="min-h-28 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-[#049FA7] focus:bg-white focus:ring-2 focus:ring-[#049FA7]/20"
+              />
+            </div>
+          </form>
+          <DialogFooter className="border-t border-slate-100 bg-white px-0">
+            <Button
+              type="submit"
+              form="request-leave-form"
+              disabled={isSubmittingRequest}
+              className="w-full rounded-xl bg-[#049FA7] text-white hover:bg-[#038891]"
+            >
+              {isSubmittingRequest ? (
+                <>
+                  <LoadingSpinner label="Submitting leave request" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit request'
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

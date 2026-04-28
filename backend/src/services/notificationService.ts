@@ -8,7 +8,7 @@ type DateValue = Date | string;
 const frontendUrl = (): string =>
   (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
-const loginUrl = (): string => `${frontendUrl()}/login`;
+const loginUrl = (): string => `${frontendUrl()}/signin`;
 
 const leaveStatusUrl = (leaveRequestId: string): string =>
   `${frontendUrl()}/leave/${leaveRequestId}`;
@@ -31,24 +31,25 @@ export const notifyEmployeeCreated = async ({
   firstName,
   lastName,
   role,
+  temporaryPassword,
 }: {
   to: string;
   firstName: string;
   lastName?: string;
   role: UserRole;
+  temporaryPassword: string;
 }): Promise<void> => {
-  await sendBestEffort('Employee created', () =>
-    sendTemplateEmail({
-      to,
-      template: EMAIL_TEMPLATES.EMPLOYEE_CREATED,
-      payload: {
-        firstName,
-        lastName,
-        role: roleLabel(role),
-        loginUrl: loginUrl(),
-      },
-    }),
-  );
+  await sendTemplateEmail({
+    to,
+    template: EMAIL_TEMPLATES.EMPLOYEE_CREATED,
+    payload: {
+      firstName,
+      lastName,
+      role: roleLabel(role),
+      loginUrl: loginUrl(),
+      temporaryPassword,
+    },
+  });
 };
 
 export const notifyPasswordChanged = async ({

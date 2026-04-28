@@ -11,6 +11,7 @@ import LeaveRequestsPage from '@/pages/LeaveRequests'
 import DepartmentsPage from '@/pages/Departments'
 import PositionsPage from '@/pages/Positions'
 import NotFoundPage from '@/pages/NotFound'
+import ProfilePage from '@/pages/Profile'
 import Home from './pages/Home'
 
 function App() {
@@ -35,7 +36,7 @@ function App() {
         <Route
           path="/employees"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'hr_manager']}>
               <SidebarLayout>
                 <EmployeesPage />
               </SidebarLayout>
@@ -55,7 +56,7 @@ function App() {
         <Route
           path="/departments"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <SidebarLayout>
                 <DepartmentsPage />
               </SidebarLayout>
@@ -65,9 +66,19 @@ function App() {
         <Route
           path="/positions"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin']}>
               <SidebarLayout>
                 <PositionsPage />
+              </SidebarLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute requiredPermission="profile:read:self">
+              <SidebarLayout>
+                <ProfilePage />
               </SidebarLayout>
             </ProtectedRoute>
           }

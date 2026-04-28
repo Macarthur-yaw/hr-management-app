@@ -3,6 +3,7 @@ import {
   Bell,
   BriefcaseBusiness,
   Building2,
+  IdCard,
   LayoutDashboard,
   LogOut,
   Search,
@@ -13,7 +14,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useAuthStore } from "@/hooks/useAuth";
+import {
+  hasPermission,
+  useAuthStore,
+  type AppPermission,
+} from "@/hooks/useAuth";
+import type { BackendRole } from "@/services/api";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { authService } from "@/services/api";
@@ -28,12 +34,53 @@ interface SidebarLayoutProps {
   children: ReactNode;
 }
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Users, label: "Employees", path: "/employees" },
-  { icon: Building2, label: "Departments", path: "/departments" },
-  { icon: BriefcaseBusiness, label: "Positions", path: "/positions" },
-  { icon: ClipboardCheck, label: "Leave Requests", path: "/leave-requests" },
+const menuItems: Array<{
+  icon: typeof LayoutDashboard
+  label: string
+  path: string
+  permission: AppPermission
+  roles?: BackendRole[]
+}> = [
+  {
+    icon: LayoutDashboard,
+    label: "Dashboard",
+    path: "/dashboard",
+    permission: "dashboard:view",
+  },
+  {
+    icon: IdCard,
+    label: "My Profile",
+    path: "/profile",
+    permission: "profile:read:self",
+    roles: ["employee"],
+  },
+  {
+    icon: Users,
+    label: "Employees",
+    path: "/employees",
+    permission: "employees:read",
+    roles: ["admin", "hr_manager"],
+  },
+  {
+    icon: Building2,
+    label: "Departments",
+    path: "/departments",
+    permission: "departments:manage",
+    roles: ["admin"],
+  },
+  {
+    icon: BriefcaseBusiness,
+    label: "Positions",
+    path: "/positions",
+    permission: "positions:manage",
+    roles: ["admin"],
+  },
+  {
+    icon: ClipboardCheck,
+    label: "Leave Requests",
+    path: "/leave-requests",
+    permission: "leave:read:self",
+  },
 ];
 
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
@@ -42,6 +89,13 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const visibleMenuItems = menuItems.filter((item) => {
+    if (!hasPermission(user?.role, item.permission)) {
+      return false;
+    }
+
+    return item.roles ? item.roles.includes(user?.role as BackendRole) : true;
+  });
 
   const handleLogout = async () => {
     if (isLoggingOut) {
@@ -111,7 +165,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
               </p>
             )}
 
-            {menuItems.map((item) => {
+            {visibleMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
 
@@ -262,7 +316,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
 
         {/* ── Mobile Bottom Nav ── */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-100 flex items-center justify-around px-2 py-2 safe-area-bottom">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
 

@@ -48,15 +48,7 @@ const defaultForm = {
   title: '',
   description: '',
   departmentId: NO_DEPARTMENT_VALUE,
-  permissions: '',
   accessLevel: 'basic' as AccessLevel,
-}
-
-const parsePermissions = (value: string) => {
-  return value
-    .split(',')
-    .map((permission) => permission.trim())
-    .filter(Boolean)
 }
 
 export default function AddPositionDialog({
@@ -120,7 +112,6 @@ export default function AddPositionDialog({
         description: form.description.trim() || undefined,
         departmentId:
           form.departmentId === NO_DEPARTMENT_VALUE ? undefined : form.departmentId,
-        permissions: parsePermissions(form.permissions),
         accessLevel: form.accessLevel,
       })
 
@@ -158,7 +149,7 @@ export default function AddPositionDialog({
                 Add new position
               </DialogTitle>
               <DialogDescription className="mt-0.5 text-xs text-slate-500">
-                Create a role and optionally attach it to a department.
+                Create a position and attach it to a department. Permissions are role-based.
               </DialogDescription>
             </div>
           </div>
@@ -252,20 +243,6 @@ export default function AddPositionDialog({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="position-permissions" className="text-xs font-medium text-slate-700">
-                Permissions
-              </Label>
-              <Input
-                id="position-permissions"
-                name="permissions"
-                value={form.permissions}
-                onChange={handleChange}
-                placeholder="employees.read, leave.review"
-                className="rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:border-[#049FA7] focus:bg-white focus:ring-2 focus:ring-[#049FA7]/20"
-              />
             </div>
           </form>
         </div>

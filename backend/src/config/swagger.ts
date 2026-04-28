@@ -184,22 +184,32 @@ export const swaggerDocument = {
         },
       },
       EmployeeCreateRequest: {
-        allOf: [
-          { $ref: '#/components/schemas/RegisterRequest' },
-          {
-            type: 'object',
-            properties: {
-              role: {
-                type: 'string',
-                enum: ['admin', 'hr_manager', 'employee'],
-              },
-              employmentStatus: {
-                type: 'string',
-                enum: ['active', 'inactive', 'on_leave', 'terminated'],
-              },
-            },
+        type: 'object',
+        required: ['firstName', 'lastName', 'email'],
+        properties: {
+          firstName: { type: 'string', example: 'Jane' },
+          lastName: { type: 'string', example: 'Doe' },
+          email: {
+            type: 'string',
+            format: 'email',
+            example: 'jane@example.com',
           },
-        ],
+          phone: { type: 'string', example: '+15551234567' },
+          address: { type: 'string', example: '123 Market Street' },
+          departmentId: { type: 'string' },
+          positionId: { type: 'string' },
+          salary: { type: 'number', example: 60000 },
+          dateJoined: { type: 'string', format: 'date-time' },
+          profileImage: { type: 'string' },
+          role: {
+            type: 'string',
+            enum: ['admin', 'hr_manager', 'employee'],
+          },
+          employmentStatus: {
+            type: 'string',
+            enum: ['active', 'inactive', 'on_leave', 'terminated'],
+          },
+        },
       },
       DepartmentRequest: {
         type: 'object',

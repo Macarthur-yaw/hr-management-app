@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
+  BriefcaseBusiness,
   Building2,
   CalendarDays,
+  ClipboardCheck,
   Ellipsis,
   FileClock,
   Users,
@@ -25,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import AddEmployeeDialog from '@/components/AddEmployeeDialog'
 import { canManagePeople, useAuthStore } from "@/hooks/useAuth";
@@ -142,6 +146,17 @@ const getEmployeeName = (request: LeaveRequest) => {
   return `${request.employee.firstName} ${request.employee.lastName}`.trim();
 };
 
+const formatEmploymentStatus = (status?: string) => {
+  if (!status) {
+    return "Not available";
+  }
+
+  return status
+    .split("_")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+};
+
 const DepartmentChartSkeleton = () => (
   <div className="flex h-full items-end gap-3 px-2 pb-8 pt-6">
     {["h-24", "h-36", "h-28", "h-44", "h-32", "h-20"].map((height, index) => (
@@ -191,7 +206,9 @@ export default function DashboardPage() {
   const [upcomingLeaveRequests, setUpcomingLeaveRequests] = useState<
     LeaveRequest[]
   >([]);
+  const [myLeaveRequests, setMyLeaveRequests] = useState<LeaveRequest[]>([]);
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
+  const [isLoadingMyLeave, setIsLoadingMyLeave] = useState(false);
   const canViewOverview = canManagePeople(user?.role);
 
   useEffect(() => {
@@ -269,6 +286,41 @@ export default function DashboardPage() {
     };
 
     void loadOverview();
+
+    return () => {
+      isActive = false;
+    };
+  }, [canViewOverview]);
+
+  useEffect(() => {
+    if (canViewOverview) {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadMyLeave = async () => {
+      setIsLoadingMyLeave(true);
+
+      try {
+        const response = await leaveService.listMine();
+
+        if (isActive) {
+          setMyLeaveRequests(response.leaveRequests);
+        }
+      } catch (error) {
+        if (isActive) {
+          setMyLeaveRequests([]);
+          toast.error(getApiErrorMessage(error, "Could not load your leave data"));
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingMyLeave(false);
+        }
+      }
+    };
+
+    void loadMyLeave();
 
     return () => {
       isActive = false;
@@ -360,6 +412,215 @@ export default function DashboardPage() {
     0,
   );
 
+  const myLeaveCounts = myLeaveRequests.reduce(
+    (counts, request) => ({
+      ...counts,
+      [request.status]: counts[request.status] + 1,
+    }),
+    {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+    } as Record<LeaveStatus, number>,
+  );
+
+  if (!canViewOverview) {
+    const employee = user?.employee;
+    const latestLeaveRequests = myLeaveRequests.slice(0, 3);
+    const employeeStats = [
+      {
+        title: "Profile Status",
+        value: employee?.isActive
+          ? formatEmploymentStatus(employee.employmentStatus)
+          : "Inactive",
+        sub: "Your account status",
+        icon: UserCheck,
+        bg: "bg-[#EAF8FB]",
+      },
+      {
+        title: "Department",
+        value: employee?.department?.name ?? "Unassigned",
+        sub: "Your assigned team",
+        icon: Building2,
+        bg: "bg-[#F8F4D9]",
+      },
+      {
+        title: "Position",
+        value: employee?.position?.title ?? "Unassigned",
+        sub: "Your current role",
+        icon: BriefcaseBusiness,
+        bg: "bg-[#EAF8FB]",
+      },
+      {
+        title: "Leave Requests",
+        value: myLeaveRequests.length.toLocaleString(),
+        sub: "Your submitted requests",
+        icon: ClipboardCheck,
+        bg: "bg-[#F8F4D9]",
+        isLoading: isLoadingMyLeave,
+      },
+    ];
+
+    return (
+      <div className="space-y-5 max-w-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-extrabold text-slate-950">
+              Hello, {user?.name || "there"}!
+            </h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              View your profile, leave history, and employee self-service tools.
+            </p>
+          </div>
+
+          <Button
+            asChild
+            className="w-fit rounded-xl bg-[#049FA7] text-white hover:bg-[#038891]"
+          >
+            <Link to="/leave-requests">Request leave</Link>
+          </Button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {employeeStats.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <Card key={item.title} className="rounded-2xl bg-white shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <p className="text-xs font-bold text-slate-900">{item.title}</p>
+                    <Ellipsis size={16} className="shrink-0 text-slate-400" />
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <div
+                      className={`grid size-10 shrink-0 place-items-center rounded-xl ${item.bg}`}
+                    >
+                      <Icon size={20} className="text-[#049FA7]" />
+                    </div>
+                    <div className="min-w-0">
+                      {item.isLoading ? (
+                        <Skeleton className="h-7 w-20 rounded-lg" />
+                      ) : (
+                        <h3 className="truncate text-xl font-extrabold text-slate-950">
+                          {item.value}
+                        </h3>
+                      )}
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {item.sub}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+          <Card className="rounded-2xl bg-white shadow-sm">
+            <CardHeader className="px-5 pt-5 pb-2">
+              <CardTitle className="text-base font-extrabold text-slate-950">
+                My Leave Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {leaveStatusOptions.map((item) => (
+                  <div
+                    key={item.status}
+                    className="rounded-xl border border-slate-100 bg-slate-50 p-4"
+                  >
+                    {isLoadingMyLeave ? (
+                      <Skeleton className="h-7 w-12 rounded-md" />
+                    ) : (
+                      <p className="text-2xl font-extrabold text-slate-950">
+                        {myLeaveCounts[item.status]}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {item.name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5">
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Recent leave requests
+                </h3>
+                <div className="mt-3 space-y-3">
+                  {isLoadingMyLeave ? (
+                    <PendingLeaveSkeleton />
+                  ) : latestLeaveRequests.length > 0 ? (
+                    latestLeaveRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="rounded-xl border border-slate-100 bg-white p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-bold text-slate-900">
+                            {formatDateRange(request.startDate, request.endDate)}
+                          </p>
+                          <span className="rounded-full bg-[#EAF8FB] px-2 py-0.5 text-[11px] font-bold capitalize text-[#049FA7]">
+                            {request.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                          {request.reason}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm font-medium text-slate-500">
+                      No leave requests yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="h-fit rounded-2xl bg-white shadow-sm xl:sticky xl:top-5">
+            <CardHeader className="px-5 pt-5 pb-0">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="text-[#049FA7]" size={18} />
+                <CardTitle className="text-base font-extrabold text-slate-950">
+                  {calendar.label}
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <div className="mt-4 grid grid-cols-7 gap-1 text-center sm:gap-2 xl:gap-1.5">
+                {weekDays.map((day) => (
+                  <p key={day} className="text-[11px] font-medium text-slate-400">
+                    {day}
+                  </p>
+                ))}
+                {calendar.cells.map((cell) =>
+                  cell.day === null ? (
+                    <div key={cell.key} className="aspect-square" aria-hidden="true" />
+                  ) : (
+                    <div
+                      key={cell.key}
+                      className={`mx-auto flex aspect-square w-full max-w-9 items-center justify-center rounded-full text-xs font-bold sm:text-sm ${
+                        cell.isToday
+                          ? "bg-[#049FA7] text-white"
+                          : "text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      {cell.day}
+                    </div>
+                  ),
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 max-w-full">
       {/* Header row */}
@@ -430,9 +691,9 @@ export default function DashboardPage() {
                   <CardTitle className="text-base font-extrabold text-slate-950">
                     Employees by Department
                   </CardTitle>
-                  <span className="w-fit rounded-full bg-[#EAF8FB] px-3 py-1 text-[11px] font-bold text-[#049FA7]">
+                  {/* <span className="w-fit rounded-full bg-[#EAF8FB] px-3 py-1 text-[11px] font-bold text-[#049FA7]">
                     Live API data
-                  </span>
+                  </span> */}
                 </div>
               </CardHeader>
               <CardContent className="px-5 pb-5">

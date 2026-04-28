@@ -36,12 +36,84 @@ const roleLabels: Record<BackendRole, string> = {
   employee: 'Employee',
 }
 
+export type AppPermission =
+  | 'dashboard:view'
+  | 'employees:read'
+  | 'employees:manage'
+  | 'profile:read:self'
+  | 'departments:read'
+  | 'departments:manage'
+  | 'positions:read'
+  | 'positions:manage'
+  | 'leave:read:self'
+  | 'leave:read:all'
+  | 'leave:request'
+  | 'leave:review'
+
+export const rolePermissions: Record<BackendRole, readonly AppPermission[]> = {
+  admin: [
+    'dashboard:view',
+    'employees:read',
+    'employees:manage',
+    'profile:read:self',
+    'departments:read',
+    'departments:manage',
+    'positions:read',
+    'positions:manage',
+    'leave:read:self',
+    'leave:read:all',
+    'leave:request',
+    'leave:review',
+  ],
+  hr_manager: [
+    'dashboard:view',
+    'employees:read',
+    'employees:manage',
+    'profile:read:self',
+    'departments:read',
+    'positions:read',
+    'leave:read:self',
+    'leave:read:all',
+    'leave:request',
+    'leave:review',
+  ],
+  employee: [
+    'dashboard:view',
+    'profile:read:self',
+    'leave:read:self',
+    'leave:request',
+  ],
+}
+
 export const getRoleLabel = (role?: BackendRole) => {
   return role ? roleLabels[role] : 'Employee'
 }
 
+export const hasPermission = (
+  role: BackendRole | undefined,
+  permission: AppPermission,
+) => {
+  return role ? rolePermissions[role].includes(permission) : false
+}
+
 export const canManagePeople = (role?: BackendRole) => {
-  return role === 'admin' || role === 'hr_manager'
+  return hasPermission(role, 'employees:manage')
+}
+
+export const canManageDepartments = (role?: BackendRole) => {
+  return hasPermission(role, 'departments:manage')
+}
+
+export const canManagePositions = (role?: BackendRole) => {
+  return hasPermission(role, 'positions:manage')
+}
+
+export const canReviewLeave = (role?: BackendRole) => {
+  return hasPermission(role, 'leave:review')
+}
+
+export const canRequestLeave = (role?: BackendRole) => {
+  return hasPermission(role, 'leave:request')
 }
 
 export const normalizeUser = (user: User, employeeOverride?: Employee): AppUser => {

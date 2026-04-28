@@ -1,5 +1,5 @@
 import { useState } from "react";
-import dash from "@/assets/feature-dashboard.webp";
+import dash from "@/assets/dashboard.png";
 import sticker from "@/assets/feature-sticker.webp";
 import { Button } from "./ui/button";
 
@@ -96,7 +96,7 @@ export default function Features() {
           <img
             src={sticker}
             alt="37 features sticker"
-            className="absolute right-8 top-0 z-20 w-24 rotate-12 md:w-32"
+            className="absolute right-8 top-0 z-20 w-24 rotate-12 md:w-24"
           />
 
           <div className="absolute left-0 right-0 top-28 h-72 rounded-[40px] bg-[#079EA7] [clip-path:polygon(0_34%,100%_0,100%_100%,0_100%)]" />

@@ -93,6 +93,13 @@ export interface AuthResponse {
   refreshToken: string
 }
 
+export interface RegisterResponse {
+  message: string
+  requiresApproval: boolean
+  user: User
+  employee?: Employee
+}
+
 export interface DepartmentCreatePayload {
   name: string
   description?: string
@@ -103,7 +110,6 @@ export interface PositionCreatePayload {
   title: string
   description?: string
   departmentId?: string
-  permissions?: string[]
   accessLevel?: AccessLevel
 }
 
@@ -111,7 +117,7 @@ export interface EmployeeCreatePayload {
   firstName: string
   lastName: string
   email: string
-  password: string
+  password?: string
   phone?: string
   address?: string
   role?: BackendRole
@@ -125,6 +131,12 @@ export interface EmployeeCreatePayload {
 
 export type EmployeeUpdatePayload = Partial<EmployeeCreatePayload> & {
   isActive?: boolean
+}
+
+export interface LeaveCreatePayload {
+  startDate: string
+  endDate: string
+  reason: string
 }
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
@@ -293,7 +305,7 @@ export const authService = {
     email: string
     password: string
   }) => {
-    const response = await api.post<AuthResponse>('/auth/register', userData)
+    const response = await api.post<RegisterResponse>('/auth/register', userData)
     return response.data
   },
 
@@ -347,6 +359,11 @@ export const employeeService = {
     return response.data
   },
 
+  me: async () => {
+    const response = await api.get<{ employee: Employee }>('/employees/me')
+    return response.data
+  },
+
   update: async (id: string, payload: EmployeeUpdatePayload) => {
     const response = await api.patch<{ employee: Employee }>(`/employees/${id}`, payload)
     return response.data
@@ -386,6 +403,14 @@ export const positionService = {
 }
 
 export const leaveService = {
+  request: async (payload: LeaveCreatePayload) => {
+    const response = await api.post<{ leaveRequest: LeaveRequest }>(
+      '/leave',
+      payload,
+    )
+    return response.data
+  },
+
   listAll: async (params?: { status?: LeaveStatus; employeeId?: string }) => {
     const response = await api.get<{ leaveRequests: LeaveRequest[] }>('/leave', {
       params,

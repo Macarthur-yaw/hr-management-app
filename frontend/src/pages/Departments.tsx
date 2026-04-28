@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CellValue, ColumnDef, SortState } from 'flowers-nextjs-table'
-import { Table } from 'flowers-nextjs-table'
 import { Search } from 'lucide-react'
 import { toast } from 'sonner'
 
 import AddDepartmentDialog from '@/components/AddDepartmentDialog'
+import DataTable, {
+  type DataTableColumn,
+  type DataTableSortState,
+} from '@/components/DataTable'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   departmentService,
   getApiErrorMessage,
@@ -24,9 +25,15 @@ interface Department {
   createdAt: string
 }
 
-type DepartmentColumns = Department & {
-  [key: string]: CellValue
-}
+type DepartmentSortKey =
+  | 'name'
+  | 'description'
+  | 'manager'
+  | 'employees'
+  | 'positions'
+  | 'createdAt'
+
+type DepartmentSortState = DataTableSortState<DepartmentSortKey>
 
 const getEmployeeName = (department: ApiDepartment) => {
   const manager = department.manager
@@ -50,47 +57,68 @@ const mapDepartment = (department: ApiDepartment): Department => ({
     : 'Not available',
 })
 
-const columns: ColumnDef<DepartmentColumns>[] = [
+const columns: DataTableColumn<Department, DepartmentSortKey>[] = [
   {
-    accessorKey: 'name',
+    key: 'name',
     header: 'Name',
-    enableSorting: true,
+    sortKey: 'name',
+    getSortValue: (department) => department.name,
+    render: (department) => (
+      <span className="font-semibold text-slate-950">{department.name}</span>
+    ),
+    cellClassName: 'text-slate-950',
   },
   {
-    accessorKey: 'description',
+    key: 'description',
     header: 'Description',
-    enableSorting: true,
+    sortKey: 'description',
+    getSortValue: (department) => department.description,
+    render: (department) => department.description,
+    cellClassName: 'max-w-[360px] whitespace-normal leading-6',
   },
   {
-    accessorKey: 'manager',
+    key: 'manager',
     header: 'Manager',
-    enableSorting: true,
+    sortKey: 'manager',
+    getSortValue: (department) => department.manager,
+    render: (department) => department.manager,
   },
   {
-    accessorKey: 'employees',
+    key: 'employees',
     header: 'Employees',
-    enableSorting: true,
+    sortKey: 'employees',
+    getSortValue: (department) => department.employees,
+    render: (department) => department.employees,
+    align: 'right',
+    cellClassName: 'font-semibold text-slate-950',
   },
   {
-    accessorKey: 'positions',
+    key: 'positions',
     header: 'Positions',
-    enableSorting: true,
+    sortKey: 'positions',
+    getSortValue: (department) => department.positions,
+    render: (department) => department.positions,
+    align: 'right',
+    cellClassName: 'font-semibold text-slate-950',
   },
   {
-    accessorKey: 'createdAt',
+    key: 'createdAt',
     header: 'Created',
-    enableSorting: true,
+    sortKey: 'createdAt',
+    getSortValue: (department) => department.createdAt,
+    render: (department) => department.createdAt,
   },
 ]
+
+const initialDepartmentSort: DepartmentSortState = {
+  key: 'name',
+  direction: 'asc',
+}
 
 export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [sortState, setSortState] = useState<SortState<DepartmentColumns>>({
-    key: null,
-    direction: 'asc',
-  })
 
   useEffect(() => {
     let isActive = true
@@ -157,48 +185,37 @@ export default function DepartmentsPage() {
         <AddDepartmentDialog onDepartmentCreated={handleDepartmentCreated} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Department List</CardTitle>
+      <Card className="rounded-lg border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-200 bg-slate-50/80">
+          <CardTitle className="text-slate-950">Department List</CardTitle>
           <CardDescription>
             A list of all departments in the organization
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 placeholder="Search departments..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-100 pl-10 text-slate-900 shadow-sm focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
+                className="h-10 rounded-md border border-slate-300 bg-white pl-10 text-slate-900 shadow-none focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-8 text-sm font-medium text-slate-500">
-                <LoadingSpinner label="Loading departments" />
-                Loading departments...
-              </div>
-            ) : (
-              <Table
-                data={filteredDepartments as DepartmentColumns[]}
-                columns={columns}
-                searchValue=""
-                itemsPerPage={10}
-                paginationMode="auto"
-                sortState={sortState}
-                onSortChange={setSortState}
-                showPageNumbers
-                classNames={{
-                  table: 'min-w-full divide-y divide-slate-200 text-sm',
-                }}
-              />
-            )}
-          </div>
+          <DataTable
+            key={searchTerm}
+            data={filteredDepartments}
+            columns={columns}
+            getRowKey={(department) => department.id}
+            initialSort={initialDepartmentSort}
+            emptyMessage="No departments found."
+            isLoading={isLoading}
+            loadingLabel="Loading departments"
+            minWidthClassName="min-w-[860px]"
+          />
         </CardContent>
       </Card>
     </div>

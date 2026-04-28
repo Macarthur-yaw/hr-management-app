@@ -14,7 +14,6 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { useAuthStore } from "@/hooks/useAuth";
 import { authService } from "@/services/auth";
 import { getApiErrorMessage } from "@/services/api";
 import { toast } from "sonner";
@@ -38,8 +37,8 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { login } = useAuthStore();
 
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -63,9 +62,9 @@ export default function RegisterPage() {
         password: data.password,
       });
 
-      login(response);
-      toast.success("Account created");
-      navigate("/dashboard");
+      setSubmittedEmail(response.user.email);
+      form.reset();
+      toast.success(response.message || "Registration submitted for approval");
     } catch (error) {
       toast.error(
         getApiErrorMessage(error, "Registration failed. Please review your details."),
@@ -93,109 +92,127 @@ export default function RegisterPage() {
               Create account
             </h1>
             <p className="mt-3 text-center text-sm text-slate-600">
-              Public registration creates an employee account.
+              Public registration creates a pending employee account.
             </p>
 
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="mt-8 space-y-4"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="First name"
-                            disabled={isLoading}
-                            className="h-12 rounded-full border border-slate-900 px-6"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input
-                            placeholder="Last name"
-                            disabled={isLoading}
-                            className="h-12 rounded-full border border-slate-900 px-6"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="Email"
-                          disabled={isLoading}
-                          className="h-12 rounded-full border border-slate-900 px-6"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <PasswordField
-                  label="Password"
-                  visible={showPassword}
-                  onToggle={() => setShowPassword((current) => !current)}
-                  field={form.register("password")}
-                  disabled={isLoading}
-                />
-                <p className="text-sm font-medium text-red-500">
-                  {form.formState.errors.password?.message}
+            {submittedEmail ? (
+              <div className="mt-8 rounded-3xl border border-[#049FA7]/20 bg-[#EAF8FB] p-6 text-center">
+                <h2 className="text-xl font-extrabold text-slate-950">
+                  Registration pending approval
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  We created a pending employee profile for {submittedEmail}.
+                  An admin or HR manager needs to approve it before sign-in.
                 </p>
-
-                <PasswordField
-                  label="Confirm password"
-                  visible={showConfirmPassword}
-                  onToggle={() => setShowConfirmPassword((current) => !current)}
-                  field={form.register("confirmPassword")}
-                  disabled={isLoading}
-                />
-                <p className="text-sm font-medium text-red-500">
-                  {form.formState.errors.confirmPassword?.message}
-                </p>
-
                 <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="h-12 w-full rounded-full bg-black text-white hover:bg-[#049FA7]"
+                  asChild
+                  className="mt-6 h-11 rounded-full bg-black px-6 text-white hover:bg-[#049FA7]"
                 >
-                  {isLoading ? (
-                    <>
-                      <LoadingSpinner label="Creating account" />
-                      Creating account...
-                    </>
-                  ) : (
-                    "Register"
-                  )}
+                  <Link to="/signin">Back to sign in</Link>
                 </Button>
-              </form>
-            </Form>
+              </div>
+            ) : (
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="mt-8 space-y-4"
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="First name"
+                              disabled={isLoading}
+                              className="h-12 rounded-full border border-slate-900 px-6"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Last name"
+                              disabled={isLoading}
+                              className="h-12 rounded-full border border-slate-900 px-6"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="Email"
+                            disabled={isLoading}
+                            className="h-12 rounded-full border border-slate-900 px-6"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <PasswordField
+                    label="Password"
+                    visible={showPassword}
+                    onToggle={() => setShowPassword((current) => !current)}
+                    field={form.register("password")}
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm font-medium text-red-500">
+                    {form.formState.errors.password?.message}
+                  </p>
+
+                  <PasswordField
+                    label="Confirm password"
+                    visible={showConfirmPassword}
+                    onToggle={() => setShowConfirmPassword((current) => !current)}
+                    field={form.register("confirmPassword")}
+                    disabled={isLoading}
+                  />
+                  <p className="text-sm font-medium text-red-500">
+                    {form.formState.errors.confirmPassword?.message}
+                  </p>
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="h-12 w-full rounded-full bg-black text-white hover:bg-[#049FA7]"
+                  >
+                    {isLoading ? (
+                      <>
+                        <LoadingSpinner label="Submitting registration" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Request account"
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            )}
 
             <p className="mt-6 text-center text-sm text-slate-800">
               Already have an account?{" "}
@@ -216,8 +233,8 @@ export default function RegisterPage() {
                 Join HQ HR Management
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Create an employee account and start using the connected HR
-                dashboard.
+                Request an employee account. HR will approve access before the
+                dashboard is available.
               </p>
             </div>
           </div>

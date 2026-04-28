@@ -1,5 +1,5 @@
 import { Mouse } from "lucide-react";
-import hero from "@/assets/hero-dashboard.webp";
+import hero from "@/assets/dashboard.png";
 import trust from "@/assets/trust-logos.webp";
 import { Button } from "./ui/button";
 

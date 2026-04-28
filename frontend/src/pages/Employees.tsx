@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { CellValue, ColumnDef, SortState } from 'flowers-nextjs-table'
-import { Table } from 'flowers-nextjs-table'
+import { CheckCircle2, Edit3, Search, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+
+import AddEmployeeDialog from '@/components/AddEmployeeDialog'
+import DataTable, {
+  type DataTableColumn,
+  type DataTableSortState,
+} from '@/components/DataTable'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   Card,
   CardContent,
@@ -11,9 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import AddEmployeeDialog from '@/components/AddEmployeeDialog'
-import { Search, Edit3, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   employeeService,
   getApiErrorMessage,
@@ -21,19 +25,35 @@ import {
   type Employee as ApiEmployee,
 } from '@/services/api'
 
-interface Employee {
+type EmployeeStatus =
+  | 'Active'
+  | 'Pending approval'
+  | 'Inactive'
+  | 'On leave'
+  | 'Terminated'
+
+interface EmployeeRow {
   id: string
   name: string
   email: string
   department: string
   role: string
-  status: 'Active' | 'Inactive'
+  status: EmployeeStatus
   salary: number
+  dateJoined: string
+  record: ApiEmployee
 }
 
-type EmployeeColumns = Employee & {
-  [key: string]: CellValue
-}
+type SortKey =
+  | 'name'
+  | 'email'
+  | 'department'
+  | 'role'
+  | 'status'
+  | 'salary'
+  | 'dateJoined'
+
+type EmployeeSortState = DataTableSortState<SortKey>
 
 const roleLabels: Record<BackendRole, string> = {
   admin: 'Admin',
@@ -41,117 +61,81 @@ const roleLabels: Record<BackendRole, string> = {
   employee: 'Employee',
 }
 
+const statusClasses: Record<EmployeeStatus, string> = {
+  Active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  'Pending approval': 'border-amber-200 bg-amber-50 text-amber-700',
+  Inactive: 'border-slate-200 bg-slate-100 text-slate-700',
+  'On leave': 'border-sky-200 bg-sky-50 text-sky-700',
+  Terminated: 'border-red-200 bg-red-50 text-red-700',
+}
+
 const getRoleLabel = (role?: BackendRole) => (role ? roleLabels[role] : 'Employee')
 
-const mapEmployee = (employee: ApiEmployee): Employee => ({
+const getEmployeeStatus = (employee: ApiEmployee): EmployeeStatus => {
+  const userActive = employee.user?.isActive ?? employee.isActive
+
+  if (
+    !userActive &&
+    !employee.isActive &&
+    employee.employmentStatus === 'inactive'
+  ) {
+    return 'Pending approval'
+  }
+
+  if (employee.employmentStatus === 'terminated') {
+    return 'Terminated'
+  }
+
+  if (!userActive || !employee.isActive) {
+    return 'Inactive'
+  }
+
+  if (employee.employmentStatus === 'on_leave') {
+    return 'On leave'
+  }
+
+  if (employee.employmentStatus === 'inactive') {
+    return 'Inactive'
+  }
+
+  return 'Active'
+}
+
+const formatDate = (value?: string) => {
+  if (!value) {
+    return 'Not available'
+  }
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString()
+}
+
+const mapEmployee = (employee: ApiEmployee): EmployeeRow => ({
   id: employee.id,
   name: `${employee.firstName} ${employee.lastName}`.trim(),
   email: employee.user?.email ?? 'No email',
   department: employee.department?.name ?? 'Unassigned',
   role: employee.position?.title ?? getRoleLabel(employee.user?.role),
-  status:
-    employee.isActive && employee.employmentStatus !== 'terminated'
-      ? 'Active'
-      : 'Inactive',
+  status: getEmployeeStatus(employee),
   salary: Number(employee.salary ?? 0),
+  dateJoined: formatDate(employee.dateJoined),
+  record: employee,
 })
 
-const getEmployeeColumns = ({
-  onEdit,
-  onDelete,
-  deactivatingEmployeeId,
-}: {
-  onEdit?: (employee: Employee) => void
-  onDelete?: (employee: Employee) => void
-  deactivatingEmployeeId?: string | null
-}): ColumnDef<EmployeeColumns>[] => [
-  {
-    accessorKey: 'name',
-    header: 'Name',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'email',
-    header: 'Email',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'department',
-    header: 'Department',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'role',
-    header: 'Role',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'status',
-    header: 'Status',
-    cell: (employee) => (
-      <span
-        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-          employee.status === 'Active'
-            ? 'bg-emerald-100 text-emerald-800'
-            : 'bg-red-100 text-red-800'
-        }`}
-      >
-        {employee.status}
-      </span>
-    ),
-  },
-  {
-    accessorKey: 'salary',
-    header: 'Salary',
-    enableSorting: true,
-    cell: (employee) => `$${Number(employee.salary).toLocaleString()}`,
-  },
-  {
-    accessorKey: 'actions',
-    header: '',
-    enableSorting: false,
-    enableResizing: false,
-    size: 110,
-    cell: (employee) => (
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-slate-600 hover:text-slate-900"
-          disabled={deactivatingEmployeeId === employee.id}
-          aria-label={`Edit ${employee.name}`}
-          onClick={() => onEdit?.(employee as Employee)}
-        >
-          <Edit3 className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-slate-600 hover:text-slate-900"
-          disabled={deactivatingEmployeeId === employee.id}
-          aria-label={`Deactivate ${employee.name}`}
-          onClick={() => onDelete?.(employee as Employee)}
-        >
-          {deactivatingEmployeeId === employee.id ? (
-            <LoadingSpinner className="h-4 w-4" label={`Deactivating ${employee.name}`} />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-    ),
-  },
-]
+const formatSalary = (salary: number) =>
+  salary > 0 ? `$${salary.toLocaleString()}` : 'Not set'
+
+const initialEmployeeSort: EmployeeSortState = {
+  key: 'name',
+  direction: 'asc',
+}
 
 export default function EmployeesPage() {
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<ApiEmployee[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [deactivatingEmployeeId, setDeactivatingEmployeeId] = useState<string | null>(null)
-  const [sortState, setSortState] = useState<SortState<EmployeeColumns>>({
-    key: null,
-    direction: 'asc',
-  })
+  const [approvingEmployeeId, setApprovingEmployeeId] = useState<string | null>(null)
 
   useEffect(() => {
     let isActive = true
@@ -167,7 +151,7 @@ export default function EmployeesPage() {
         })
 
         if (isActive) {
-          setEmployees(response.employees.map(mapEmployee))
+          setEmployees(response.employees)
         }
       } catch (error) {
         if (isActive) {
@@ -191,14 +175,41 @@ export default function EmployeesPage() {
   }, [searchTerm])
 
   const handleEmployeeCreated = (employee: ApiEmployee) => {
-    setEmployees((current) => [mapEmployee(employee), ...current])
+    setEmployees((current) => [employee, ...current])
   }
 
-  const handleEditEmployee = (employee: Employee) => {
-    toast.info(`Editing ${employee.name} will use the update endpoint in the next pass`)
+  const handleEmployeeUpdated = (employee: ApiEmployee) => {
+    setEmployees((current) =>
+      current.map((item) => (item.id === employee.id ? employee : item)),
+    )
   }
 
-  const handleDeleteEmployee = async (employee: Employee) => {
+  const handleApproveEmployee = async (employee: EmployeeRow) => {
+    if (approvingEmployeeId) {
+      return
+    }
+
+    setApprovingEmployeeId(employee.id)
+
+    try {
+      const response = await employeeService.update(employee.id, {
+        isActive: true,
+        employmentStatus: 'active',
+      })
+      setEmployees((current) =>
+        current.map((item) =>
+          item.id === employee.id ? response.employee : item,
+        ),
+      )
+      toast.success(`${employee.name} approved`)
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Could not approve employee'))
+    } finally {
+      setApprovingEmployeeId(null)
+    }
+  }
+
+  const handleDeleteEmployee = async (employee: EmployeeRow) => {
     if (deactivatingEmployeeId) {
       return
     }
@@ -209,7 +220,7 @@ export default function EmployeesPage() {
       const response = await employeeService.deactivate(employee.id)
       setEmployees((current) =>
         current.map((item) =>
-          item.id === employee.id ? mapEmployee(response.employee) : item,
+          item.id === employee.id ? response.employee : item,
         ),
       )
       toast.success(response.message || 'Employee deactivated')
@@ -220,11 +231,131 @@ export default function EmployeesPage() {
     }
   }
 
-  const columns = getEmployeeColumns({
-    onEdit: handleEditEmployee,
-    onDelete: handleDeleteEmployee,
-    deactivatingEmployeeId,
-  })
+  const columns: DataTableColumn<EmployeeRow, SortKey>[] = [
+    {
+      key: 'employee',
+      header: 'Employee',
+      sortKey: 'name',
+      getSortValue: (employee) => employee.name,
+      render: (employee) => (
+        <span className="font-semibold text-slate-950">{employee.name}</span>
+      ),
+      cellClassName: 'text-slate-950',
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      sortKey: 'email',
+      getSortValue: (employee) => employee.email,
+      render: (employee) => employee.email,
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      sortKey: 'department',
+      getSortValue: (employee) => employee.department,
+      render: (employee) => employee.department,
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      sortKey: 'role',
+      getSortValue: (employee) => employee.role,
+      render: (employee) => employee.role,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortKey: 'status',
+      getSortValue: (employee) => employee.status,
+      render: (employee) => (
+        <Badge variant="outline" className={statusClasses[employee.status]}>
+          {employee.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'salary',
+      header: 'Salary',
+      sortKey: 'salary',
+      getSortValue: (employee) => employee.salary,
+      render: (employee) => formatSalary(employee.salary),
+      align: 'right',
+      cellClassName: 'font-semibold text-slate-950',
+    },
+    {
+      key: 'dateJoined',
+      header: 'Start date',
+      sortKey: 'dateJoined',
+      getSortValue: (employee) => employee.dateJoined,
+      render: (employee) => employee.dateJoined,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (employee) => {
+        const isApproving = approvingEmployeeId === employee.id
+        const isDeactivating = deactivatingEmployeeId === employee.id
+        const isBusy = isApproving || isDeactivating
+
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {employee.status === 'Pending approval' && (
+              <Button
+                size="sm"
+                className="h-8 rounded-md bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
+                disabled={isBusy}
+                onClick={() => void handleApproveEmployee(employee)}
+              >
+                {isApproving ? (
+                  <LoadingSpinner
+                    className="h-3.5 w-3.5"
+                    label={`Approving ${employee.name}`}
+                  />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                Approve
+              </Button>
+            )}
+            <AddEmployeeDialog
+              employee={employee.record}
+              onEmployeeUpdated={handleEmployeeUpdated}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                  disabled={isBusy}
+                  aria-label={`Edit ${employee.name}`}
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-slate-600 hover:bg-red-50 hover:text-red-700"
+              disabled={isBusy || employee.status === 'Terminated'}
+              aria-label={`Deactivate ${employee.name}`}
+              onClick={() => void handleDeleteEmployee(employee)}
+            >
+              {isDeactivating ? (
+                <LoadingSpinner
+                  className="h-4 w-4"
+                  label={`Deactivating ${employee.name}`}
+                />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
     <div className="space-y-6 rounded-[32px] bg-white p-8 shadow-sm">
@@ -232,55 +363,44 @@ export default function EmployeesPage() {
         <div>
           <h1 className="text-3xl font-extrabold text-slate-950">Employees</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Manage employee information with live backend data.
+            Manage employee information, approvals, and account access.
           </p>
         </div>
 
         <AddEmployeeDialog onEmployeeCreated={handleEmployeeCreated} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Employee List</CardTitle>
+      <Card className="rounded-lg border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-200 bg-slate-50/80">
+          <CardTitle className="text-slate-950">Employee List</CardTitle>
           <CardDescription>
-            A list of all employees in the organization
+            HR-created employees are approved immediately. Public registrations need approval.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 placeholder="Search employees..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-100 pl-10 text-slate-900 shadow-sm focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
+                className="h-10 rounded-md border border-slate-300 bg-white pl-10 text-slate-900 shadow-none focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-8 text-sm font-medium text-slate-500">
-                <LoadingSpinner label="Loading employees" />
-                Loading employees...
-              </div>
-            ) : (
-              <Table
-                data={employees as EmployeeColumns[]}
-                columns={columns}
-                searchValue=""
-                itemsPerPage={10}
-                paginationMode="auto"
-                sortState={sortState}
-                onSortChange={setSortState}
-                showPageNumbers
-                classNames={{
-                  table: 'min-w-full divide-y divide-slate-200 text-sm',
-                }}
-              />
-            )}
-          </div>
+          <DataTable
+            key={searchTerm}
+            data={employees.map(mapEmployee)}
+            columns={columns}
+            getRowKey={(employee) => employee.id}
+            initialSort={initialEmployeeSort}
+            emptyMessage="No employees found."
+            isLoading={isLoading}
+            loadingLabel="Loading employees"
+            minWidthClassName="min-w-[980px]"
+          />
         </CardContent>
       </Card>
     </div>

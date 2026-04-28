@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CellValue, ColumnDef, SortState } from 'flowers-nextjs-table'
-import { Table } from 'flowers-nextjs-table'
 import { Search } from 'lucide-react'
 import { toast } from 'sonner'
 
 import AddPositionDialog from '@/components/AddPositionDialog'
+import DataTable, {
+  type DataTableColumn,
+  type DataTableSortState,
+} from '@/components/DataTable'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   getApiErrorMessage,
   positionService,
@@ -21,14 +22,19 @@ interface Position {
   description: string
   department: string
   accessLevel: string
-  permissions: string
   employees: number
   createdAt: string
 }
 
-type PositionColumns = Position & {
-  [key: string]: CellValue
-}
+type PositionSortKey =
+  | 'title'
+  | 'description'
+  | 'department'
+  | 'accessLevel'
+  | 'employees'
+  | 'createdAt'
+
+type PositionSortState = DataTableSortState<PositionSortKey>
 
 const accessLevelLabels: Record<AccessLevel, string> = {
   basic: 'Basic',
@@ -42,60 +48,72 @@ const mapPosition = (position: ApiPosition): Position => ({
   description: position.description || 'No description',
   department: position.department?.name ?? 'Unassigned',
   accessLevel: accessLevelLabels[position.accessLevel],
-  permissions:
-    position.permissions.length > 0 ? position.permissions.join(', ') : 'None',
   employees: position._count?.employees ?? position.employees?.length ?? 0,
   createdAt: position.createdAt
     ? new Date(position.createdAt).toLocaleDateString()
     : 'Not available',
 })
 
-const columns: ColumnDef<PositionColumns>[] = [
+const columns: DataTableColumn<Position, PositionSortKey>[] = [
   {
-    accessorKey: 'title',
+    key: 'title',
     header: 'Title',
-    enableSorting: true,
+    sortKey: 'title',
+    getSortValue: (position) => position.title,
+    render: (position) => (
+      <span className="font-semibold text-slate-950">{position.title}</span>
+    ),
+    cellClassName: 'text-slate-950',
   },
   {
-    accessorKey: 'description',
+    key: 'description',
     header: 'Description',
-    enableSorting: true,
+    sortKey: 'description',
+    getSortValue: (position) => position.description,
+    render: (position) => position.description,
+    cellClassName: 'max-w-[320px] whitespace-normal leading-6',
   },
   {
-    accessorKey: 'department',
+    key: 'department',
     header: 'Department',
-    enableSorting: true,
+    sortKey: 'department',
+    getSortValue: (position) => position.department,
+    render: (position) => position.department,
   },
   {
-    accessorKey: 'accessLevel',
+    key: 'accessLevel',
     header: 'Access',
-    enableSorting: true,
+    sortKey: 'accessLevel',
+    getSortValue: (position) => position.accessLevel,
+    render: (position) => position.accessLevel,
   },
   {
-    accessorKey: 'permissions',
-    header: 'Permissions',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'employees',
+    key: 'employees',
     header: 'Employees',
-    enableSorting: true,
+    sortKey: 'employees',
+    getSortValue: (position) => position.employees,
+    render: (position) => position.employees,
+    align: 'right',
+    cellClassName: 'font-semibold text-slate-950',
   },
   {
-    accessorKey: 'createdAt',
+    key: 'createdAt',
     header: 'Created',
-    enableSorting: true,
+    sortKey: 'createdAt',
+    getSortValue: (position) => position.createdAt,
+    render: (position) => position.createdAt,
   },
 ]
+
+const initialPositionSort: PositionSortState = {
+  key: 'title',
+  direction: 'asc',
+}
 
 export default function PositionsPage() {
   const [positions, setPositions] = useState<Position[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [sortState, setSortState] = useState<SortState<PositionColumns>>({
-    key: null,
-    direction: 'asc',
-  })
 
   useEffect(() => {
     let isActive = true
@@ -140,7 +158,6 @@ export default function PositionsPage() {
         position.description,
         position.department,
         position.accessLevel,
-        position.permissions,
         position.employees.toString(),
       ].some((value) => value.toLowerCase().includes(search)),
     )
@@ -156,55 +173,44 @@ export default function PositionsPage() {
         <div>
           <h1 className="text-3xl font-extrabold text-slate-950">Positions</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Manage roles, permissions, and department assignments.
+            Manage positions, access levels, and department assignments.
           </p>
         </div>
 
         <AddPositionDialog onPositionCreated={handlePositionCreated} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Position List</CardTitle>
+      <Card className="rounded-lg border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-200 bg-slate-50/80">
+          <CardTitle className="text-slate-950">Position List</CardTitle>
           <CardDescription>
             A list of all positions in the organization
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="p-0">
+          <div className="flex flex-col gap-4 border-b border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 placeholder="Search positions..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="rounded-2xl border border-slate-200 bg-slate-100 pl-10 text-slate-900 shadow-sm focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
+                className="h-10 rounded-md border border-slate-300 bg-white pl-10 text-slate-900 shadow-none focus:border-[#049FA7] focus:ring-2 focus:ring-[#049FA7]/20"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 p-8 text-sm font-medium text-slate-500">
-                <LoadingSpinner label="Loading positions" />
-                Loading positions...
-              </div>
-            ) : (
-              <Table
-                data={filteredPositions as PositionColumns[]}
-                columns={columns}
-                searchValue=""
-                itemsPerPage={10}
-                paginationMode="auto"
-                sortState={sortState}
-                onSortChange={setSortState}
-                showPageNumbers
-                classNames={{
-                  table: 'min-w-full divide-y divide-slate-200 text-sm',
-                }}
-              />
-            )}
-          </div>
+          <DataTable
+            key={searchTerm}
+            data={filteredPositions}
+            columns={columns}
+            getRowKey={(position) => position.id}
+            initialSort={initialPositionSort}
+            emptyMessage="No positions found."
+            isLoading={isLoading}
+            loadingLabel="Loading positions"
+            minWidthClassName="min-w-[980px]"
+          />
         </CardContent>
       </Card>
     </div>

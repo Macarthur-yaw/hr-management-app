@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { format } from 'date-fns'
 import { CalendarIcon, Plus, UserPlus } from 'lucide-react'
 import {
@@ -41,6 +49,9 @@ import {
 
 interface AddEmployeeDialogProps {
   onEmployeeCreated?: (employee: Employee) => void
+  onEmployeeUpdated?: (employee: Employee) => void
+  employee?: Employee | null
+  trigger?: ReactNode
 }
 
 const defaultForm = {
@@ -53,25 +64,53 @@ const defaultForm = {
   salary: '',
 }
 
-const generateTemporaryPassword = () => {
-  const randomPart = Math.random().toString(36).slice(2, 10)
-  const numberPart = Math.floor(1000 + Math.random() * 9000)
-  return `HQ-${randomPart}-${numberPart}!`
+const UNASSIGNED_SELECT_VALUE = '__unassigned__'
+
+const getFormFromEmployee = (employee?: Employee | null) => {
+  if (!employee) {
+    return defaultForm
+  }
+
+  return {
+    firstName: employee.firstName ?? '',
+    lastName: employee.lastName ?? '',
+    email: employee.user?.email ?? '',
+    phone: employee.phone ?? '',
+    departmentId: employee.departmentId ?? employee.department?.id ?? '',
+    positionId: employee.positionId ?? employee.position?.id ?? '',
+    salary:
+      employee.salary !== null && employee.salary !== undefined
+        ? String(employee.salary)
+        : '',
+  }
 }
 
-export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDialogProps) {
+const getDateFromEmployee = (employee?: Employee | null) => {
+  if (!employee?.dateJoined) {
+    return undefined
+  }
+
+  const date = new Date(employee.dateJoined)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+export default function AddEmployeeDialog({
+  employee,
+  onEmployeeCreated,
+  onEmployeeUpdated,
+  trigger,
+}: AddEmployeeDialogProps) {
+  const formId = useId()
+  const isEditing = Boolean(employee)
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(defaultForm)
-  const [dateJoined, setDateJoined] = useState<Date | undefined>(undefined)
+  const [form, setForm] = useState(() => getFormFromEmployee(employee))
+  const [dateJoined, setDateJoined] = useState<Date | undefined>(() =>
+    getDateFromEmployee(employee),
+  )
   const [departments, setDepartments] = useState<Department[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [isLoadingLookups, setIsLoadingLookups] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [createdAccount, setCreatedAccount] = useState<{
-    name: string
-    email: string
-    password: string
-  } | null>(null)
 
   const availablePositions = useMemo(() => {
     if (!form.departmentId) return positions
@@ -104,11 +143,8 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen)
-    if (!nextOpen) {
-      setForm(defaultForm)
-      setDateJoined(undefined)
-      setCreatedAccount(null)
-    }
+    setForm(nextOpen ? getFormFromEmployee(employee) : defaultForm)
+    setDateJoined(nextOpen ? getDateFromEmployee(employee) : undefined)
   }
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -117,11 +153,18 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
   }
 
   const handleDepartmentChange = (value: string) => {
-    setForm((current) => ({ ...current, departmentId: value, positionId: '' }))
+    setForm((current) => ({
+      ...current,
+      departmentId: value === UNASSIGNED_SELECT_VALUE ? '' : value,
+      positionId: '',
+    }))
   }
 
   const handlePositionChange = (value: string) => {
-    setForm((current) => ({ ...current, positionId: value }))
+    setForm((current) => ({
+      ...current,
+      positionId: value === UNASSIGNED_SELECT_VALUE ? '' : value,
+    }))
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -133,14 +176,30 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
     }
 
     setIsSaving(true)
-    const password = generateTemporaryPassword()
 
     try {
+      if (isEditing && employee) {
+        const response = await employeeService.update(employee.id, {
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          departmentId: form.departmentId,
+          positionId: form.positionId,
+          salary: form.salary ? Number(form.salary) : undefined,
+          dateJoined: dateJoined ? format(dateJoined, 'yyyy-MM-dd') : undefined,
+        })
+
+        onEmployeeUpdated?.(response.employee)
+        toast.success('Employee updated successfully')
+        handleOpenChange(false)
+        return
+      }
+
       const response = await employeeService.create({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email: form.email.trim(),
-        password,
         phone: form.phone.trim() || undefined,
         departmentId: form.departmentId || undefined,
         positionId: form.positionId || undefined,
@@ -148,17 +207,17 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
         dateJoined: dateJoined ? format(dateJoined, 'yyyy-MM-dd') : undefined,
       })
 
-      setCreatedAccount({
-        name: `${response.employee.firstName} ${response.employee.lastName}`.trim(),
-        email: response.employee.user?.email ?? form.email.trim(),
-        password,
-      })
       onEmployeeCreated?.(response.employee)
       setForm(defaultForm)
       setDateJoined(undefined)
-      toast.success('Employee added successfully')
+      toast.success('Employee account created and login email sent')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Employee could not be added'))
+      toast.error(
+        getApiErrorMessage(
+          error,
+          isEditing ? 'Employee could not be updated' : 'Employee could not be added',
+        ),
+      )
     } finally {
       setIsSaving(false)
     }
@@ -167,13 +226,15 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button
-          size="lg"
-          className="rounded-xl bg-[#049FA7] text-xs text-white hover:bg-[#038891]"
-        >
-          <Plus size={14} />
-          Add Employee
-        </Button>
+        {trigger ?? (
+          <Button
+            size="lg"
+            className="rounded-xl bg-[#049FA7] text-xs text-white hover:bg-[#038891]"
+          >
+            <Plus size={14} />
+            Add Employee
+          </Button>
+        )}
       </DialogTrigger>
 
       {/* max-h + flex-col + overflow-hidden keeps the dialog from growing off-screen */}
@@ -187,10 +248,12 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
             </div>
             <div>
               <DialogTitle className="text-base font-semibold text-slate-900">
-                Add new employee
+                {isEditing ? 'Edit employee' : 'Add new employee'}
               </DialogTitle>
               <DialogDescription className="mt-0.5 text-xs text-slate-500">
-                Create the employee profile and user account in the backend.
+                {isEditing
+                  ? 'Update employee profile and account details.'
+                  : 'Create an approved employee profile and user account.'}
               </DialogDescription>
             </div>
           </div>
@@ -199,22 +262,7 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
 
-          {/* Temporary password banner (shown after creation) */}
-          {createdAccount && (
-            <div className="mb-4 rounded-xl border border-[#049FA7]/20 bg-[#EAF8FB] p-4">
-              <p className="text-sm font-semibold text-slate-900">
-                Temporary password for {createdAccount.name}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-500">{createdAccount.email}</p>
-              <Input
-                readOnly
-                value={createdAccount.password}
-                className="mt-3 rounded-xl border border-[#049FA7]/20 bg-white font-mono text-sm text-slate-900"
-              />
-            </div>
-          )}
-
-          <form id="add-employee-form" onSubmit={handleSubmit} className="grid gap-4">
+          <form id={formId} onSubmit={handleSubmit} className="grid gap-4">
 
             {/* Loading state */}
             {isLoadingLookups && (
@@ -285,6 +333,11 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent className="w-(--radix-select-trigger-width)">
+                    {form.departmentId && (
+                      <SelectItem value={UNASSIGNED_SELECT_VALUE}>
+                        Unassigned
+                      </SelectItem>
+                    )}
                     {departments.length > 0 ? (
                       departments.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
@@ -313,6 +366,11 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent className="w-(--radix-select-trigger-width)">
+                    {form.positionId && (
+                      <SelectItem value={UNASSIGNED_SELECT_VALUE}>
+                        Unassigned
+                      </SelectItem>
+                    )}
                     {availablePositions.length > 0 ? (
                       availablePositions.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
@@ -400,17 +458,19 @@ export default function AddEmployeeDialog({ onEmployeeCreated }: AddEmployeeDial
         <DialogFooter className="shrink-0 border-t border-slate-100 bg-white px-6 py-10">
           <Button
             type="submit"
-            form="add-employee-form"
+            form={formId}
             disabled={isSaving}
             className="w-full rounded-xl bg-[#049FA7] text-sm font-semibold text-white hover:bg-[#038891] focus-visible:ring-[#049FA7]/40"
           >
             {isSaving ? (
               <>
-                <LoadingSpinner label="Saving employee" />
-                Saving employee…
+                <LoadingSpinner
+                  label={isEditing ? 'Updating employee' : 'Saving employee'}
+                />
+                {isEditing ? 'Updating employee...' : 'Saving employee...'}
               </>
             ) : (
-              'Save employee'
+              isEditing ? 'Update employee' : 'Save employee'
             )}
           </Button>
         </DialogFooter>

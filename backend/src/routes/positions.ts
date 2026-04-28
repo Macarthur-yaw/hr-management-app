@@ -14,27 +14,19 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get('/', getPositions);
-router.get('/:id', getPositionById);
-router.post(
-  '/',
-  authorize(UserRole.admin, UserRole.hr_manager),
-  createPosition,
-);
-router.patch(
+router.get('/', authorize(UserRole.admin, UserRole.hr_manager), getPositions);
+router.get(
   '/:id',
   authorize(UserRole.admin, UserRole.hr_manager),
-  updatePosition,
+  getPositionById,
 );
+router.post('/', authorize(UserRole.admin), createPosition);
+router.patch('/:id', authorize(UserRole.admin), updatePosition);
 router.patch(
   '/:id/assign',
-  authorize(UserRole.admin, UserRole.hr_manager),
+  authorize(UserRole.admin),
   assignPositionToEmployee,
 );
-router.delete(
-  '/:id',
-  authorize(UserRole.admin, UserRole.hr_manager),
-  deletePosition,
-);
+router.delete('/:id', authorize(UserRole.admin), deletePosition);
 
 export default router;

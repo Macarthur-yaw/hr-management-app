@@ -27,6 +27,7 @@ export type EmailTemplatePayloads = {
     lastName?: string;
     role: string;
     loginUrl: string;
+    temporaryPassword: string;
   };
   [EMAIL_TEMPLATES.PASSWORD_CHANGED]: BasePersonPayload & {
     changedAt?: DateValue;
@@ -190,7 +191,7 @@ const renderEmployeeCreated = (
 ): RenderedEmail => {
   const subject = 'Your employee account has been created';
   const role = payload.role.replace(/_/g, ' ');
-  const text = `Your ${BRAND_NAME} account has been created. Role: ${role}. Login: ${payload.loginUrl}`;
+  const text = `Your ${BRAND_NAME} account has been created. Role: ${role}. Temporary password: ${payload.temporaryPassword}. Login: ${payload.loginUrl}`;
 
   return {
     subject,
@@ -204,8 +205,9 @@ const renderEmployeeCreated = (
           `Your employee account has been created in ${escapeHtml(BRAND_NAME)}.`,
         ) +
         field('Role', role) +
+        field('Temporary password', payload.temporaryPassword) +
         paragraph(
-          'Use the login link below to access your account. If you do not know your password, contact HR or use the password reset flow when it is available.',
+          'Use this temporary password to sign in. You should change it after your first login.',
         ) +
         button(payload.loginUrl, 'Open HR system'),
     }),

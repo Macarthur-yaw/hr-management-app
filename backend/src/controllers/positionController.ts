@@ -26,19 +26,46 @@ const parseAccessLevel = (accessLevel: unknown): AccessLevel | undefined => {
     : undefined;
 };
 
+const accessLevelPermissions: Record<AccessLevel, string[]> = {
+  [AccessLevel.basic]: [
+    'profile:read:self',
+    'leave:request',
+    'leave:read:self',
+  ],
+  [AccessLevel.manager]: [
+    'employees:read',
+    'employees:manage',
+    'leave:read:all',
+    'leave:review',
+  ],
+  [AccessLevel.admin]: [
+    'employees:read',
+    'employees:manage',
+    'departments:manage',
+    'positions:manage',
+    'leave:read:all',
+    'leave:review',
+  ],
+};
+
+const permissionsForAccessLevel = (accessLevel: AccessLevel): string[] => {
+  return accessLevelPermissions[accessLevel];
+};
+
 export const createPosition = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const { title, description, departmentId, permissions, accessLevel } =
-      req.body;
+    const { title, description, departmentId, accessLevel } = req.body;
 
     if (!title) {
       res.status(400).json({ message: 'Please provide position title' });
       return;
     }
 
+    const parsedAccessLevel =
+      parseAccessLevel(accessLevel) || AccessLevel.basic;
     const position = await prisma.position.create({
       data: {
         title,
@@ -46,8 +73,8 @@ export const createPosition = async (
         department: departmentId
           ? { connect: { id: departmentId } }
           : undefined,
-        permissions: Array.isArray(permissions) ? permissions : [],
-        accessLevel: parseAccessLevel(accessLevel) || AccessLevel.basic,
+        permissions: permissionsForAccessLevel(parsedAccessLevel),
+        accessLevel: parsedAccessLevel,
       },
       include: positionInclude,
     });
@@ -117,8 +144,7 @@ export const updatePosition = async (
 ): Promise<void> => {
   try {
     const id = getRouteParam(req.params.id);
-    const { title, description, departmentId, permissions, accessLevel } =
-      req.body;
+    const { title, description, departmentId, accessLevel } = req.body;
     const parsedAccessLevel = parseAccessLevel(accessLevel);
     const data = {
       title,
@@ -128,7 +154,9 @@ export const updatePosition = async (
         : departmentId === null || departmentId === ''
           ? { disconnect: true }
           : undefined,
-      permissions: Array.isArray(permissions) ? permissions : undefined,
+      permissions: parsedAccessLevel
+        ? permissionsForAccessLevel(parsedAccessLevel)
+        : undefined,
       accessLevel: parsedAccessLevel,
     };
 

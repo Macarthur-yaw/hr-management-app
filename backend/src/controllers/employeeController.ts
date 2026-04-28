@@ -32,6 +32,12 @@ const employeeInclude = {
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
+const generateTemporaryPassword = (): string => {
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  const numberPart = Math.floor(1000 + Math.random() * 9000);
+  return `HQ-${randomPart}-${numberPart}!`;
+};
+
 const parseRole = (role: unknown): UserRole | undefined => {
   return Object.values(UserRole).includes(role as UserRole)
     ? (role as UserRole)
@@ -57,6 +63,8 @@ export const createEmployee = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
+  let createdUserId: string | undefined;
+
   try {
     const {
       firstName,
@@ -74,9 +82,9 @@ export const createEmployee = async (
       profileImage,
     } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
+    if (!firstName || !lastName || !email) {
       res.status(400).json({
-        message: 'Please provide firstName, lastName, email, and password',
+        message: 'Please provide firstName, lastName, and email',
       });
       return;
     }
@@ -94,7 +102,11 @@ export const createEmployee = async (
 
     const requestedStatus =
       parseEmploymentStatus(employmentStatus) || EmploymentStatus.active;
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const temporaryPassword =
+      typeof password === 'string' && password.trim()
+        ? password
+        : generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const employee = await prisma.employee.create({
       data: {
@@ -120,16 +132,36 @@ export const createEmployee = async (
       },
       include: employeeInclude,
     });
+    createdUserId = employee.user.id;
 
     await notifyEmployeeCreated({
       to: employee.user.email,
       firstName: employee.firstName,
       lastName: employee.lastName,
       role: employee.user.role,
+      temporaryPassword,
     });
 
     res.status(201).json({ employee });
   } catch (error) {
+    if (createdUserId) {
+      try {
+        await prisma.user.delete({ where: { id: createdUserId } });
+      } catch (cleanupError) {
+        logger.error(
+          'Could not clean up employee account after email failure:',
+          cleanupError,
+        );
+      }
+
+      logger.error('Employee credential email failed:', error);
+      res.status(502).json({
+        message:
+          'Employee account could not be created because the login email failed to send',
+      });
+      return;
+    }
+
     if (isPrismaError(error, 'P2002')) {
       res.status(400).json({ message: 'Email already exists' });
       return;

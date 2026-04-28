@@ -14,27 +14,19 @@ const router = express.Router();
 
 router.use(protect);
 
-router.get('/', getDepartments);
-router.get('/:id', getDepartmentById);
-router.post(
-  '/',
-  authorize(UserRole.admin, UserRole.hr_manager),
-  createDepartment,
-);
-router.patch(
+router.get('/', authorize(UserRole.admin, UserRole.hr_manager), getDepartments);
+router.get(
   '/:id',
   authorize(UserRole.admin, UserRole.hr_manager),
-  updateDepartment,
+  getDepartmentById,
 );
+router.post('/', authorize(UserRole.admin), createDepartment);
+router.patch('/:id', authorize(UserRole.admin), updateDepartment);
 router.patch(
   '/:id/manager',
-  authorize(UserRole.admin, UserRole.hr_manager),
+  authorize(UserRole.admin),
   assignDepartmentManager,
 );
-router.delete(
-  '/:id',
-  authorize(UserRole.admin, UserRole.hr_manager),
-  deleteDepartment,
-);
+router.delete('/:id', authorize(UserRole.admin), deleteDepartment);
 
 export default router;

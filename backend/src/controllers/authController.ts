@@ -3,9 +3,8 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/prisma';
 import { verifyRefreshToken } from '../utils/jwt';
 import { hashRefreshToken, issueAuthTokens } from '../services/tokenService';
-import { notifyEmployeeCreated } from '../services/notificationService';
 import logger from '../config/logger';
-import { UserRole } from '../types';
+import { EmploymentStatus, UserRole } from '../types';
 
 class HttpError extends Error {
   constructor(
@@ -61,10 +60,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       password,
       phone,
       address,
-      departmentId,
-      positionId,
-      salary,
-      dateJoined,
       profileImage,
     } = req.body;
 
@@ -82,19 +77,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         email: normalizeEmail(email),
         password: hashedPassword,
         role: UserRole.employee,
+        isActive: false,
         employee: {
           create: {
             firstName,
             lastName,
             phone,
             address,
-            department: departmentId
-              ? { connect: { id: departmentId } }
-              : undefined,
-            position: positionId ? { connect: { id: positionId } } : undefined,
-            salary,
-            dateJoined: dateJoined ? new Date(dateJoined) : undefined,
+            employmentStatus: EmploymentStatus.inactive,
             profileImage,
+            isActive: false,
           },
         },
       },
@@ -112,16 +104,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       throw new Error('Employee profile was not created');
     }
 
-    const tokens = await issueAuthTokens(user.id);
-
-    await notifyEmployeeCreated({
-      to: user.email,
-      firstName: user.employee.firstName,
-      lastName: user.employee.lastName,
-      role: user.role,
-    });
-
     res.status(201).json({
+      message:
+        'Registration submitted. An admin or HR manager must approve this account before login.',
+      requiresApproval: true,
       user: {
         id: user.id,
         email: user.email,
@@ -129,8 +115,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         isActive: user.isActive,
       },
       employee: user.employee,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
@@ -170,7 +154,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     if (!user.isActive) {
-      res.status(403).json({ message: 'This account has been deactivated' });
+      const isPendingApproval =
+        user.employee?.employmentStatus === EmploymentStatus.inactive &&
+        user.employee?.isActive === false;
+
+      res.status(403).json({
+        message: isPendingApproval
+          ? 'Your account is pending approval'
+          : 'This account has been deactivated',
+      });
       return;
     }
 
@@ -234,7 +226,17 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       }
 
       if (!storedToken.user.isActive) {
-        throw new HttpError(403, 'This account has been deactivated');
+        const isPendingApproval =
+          storedToken.user.employee?.employmentStatus ===
+            EmploymentStatus.inactive &&
+          storedToken.user.employee?.isActive === false;
+
+        throw new HttpError(
+          403,
+          isPendingApproval
+            ? 'Your account is pending approval'
+            : 'This account has been deactivated',
+        );
       }
 
       await tx.refreshToken.update({
